@@ -1,4 +1,5 @@
 from discord.ext import commands
+from discord import app_commands
 import discord
 
 class Notes(commands.Cog):
@@ -7,9 +8,13 @@ class Notes(commands.Cog):
         self.user_notes = {}        # {user_id: [note1, note2, ...]}
         self.user_done_flags = {}   # {user_id: [False, True, ...]}
 
-    @commands.command(name='addnote')
-    async def add_note(self, ctx, *, note: str):
-        user_id = str(ctx.author.id)
+    async def cog_load(self):
+        # Sync the slash commands in this cog
+        await self.bot.tree.sync()
+
+    @app_commands.command(name="addnote", description="Add a new note")
+    async def add_note(self, interaction: discord.Interaction, note: str):
+        user_id = str(interaction.user.id)
         self.user_notes.setdefault(user_id, []).append(note)
         self.user_done_flags.setdefault(user_id, []).append(False)
 
@@ -18,19 +23,19 @@ class Notes(commands.Cog):
             description=f"`{note}`",
             color=discord.Color.green()
         )
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @commands.command(name='notes')
-    async def view_notes(self, ctx):
-        user_id = str(ctx.author.id)
+    @app_commands.command(name="notes", description="View your saved notes")
+    async def view_notes(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
         notes = self.user_notes.get(user_id, [])
         done_flags = self.user_done_flags.get(user_id, [])
 
         if not notes:
-            await ctx.send("You don’t have any notes yet.")
+            await interaction.response.send_message("You don’t have any notes yet.", ephemeral=True)
             return
 
-        # Create formatted list with done status
+        # Format notes
         desc = ""
         for i, note in enumerate(notes):
             if i < len(done_flags) and done_flags[i]:
@@ -45,13 +50,13 @@ class Notes(commands.Cog):
         )
 
         view = CombinedDropdownView(self.user_notes, self.user_done_flags, user_id)
-        await ctx.send(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # COMBINED DROPDOWN VIEW
 class CombinedDropdownView(discord.ui.View):
     def __init__(self, notes_dict, done_flags, user_id):
         super().__init__(timeout=None)
-        self.notes_dict = notes_dict
+        self.notes_dict = notes_dict 
         self.done_flags = done_flags
         self.user_id = user_id
         self.add_item(MarkDoneDropdown(notes_dict, done_flags, user_id))
